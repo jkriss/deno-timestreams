@@ -1,92 +1,92 @@
-import { StreamReader, Post } from './types.ts'
+import { StreamReader, Post } from "./types.ts";
 import { SEP, join } from "https://deno.land/std/path/mod.ts";
 import mime from "https://cdn.pika.dev/mime-types@^2.1.27";
-import dayjs from 'https://cdn.pika.dev/dayjs@^1.8.28';
+import dayjs from "https://cdn.pika.dev/dayjs@^1.8.28";
 
 interface ReaderOpts {
-  baseDir?: string
+  baseDir?: string;
 }
 
 export class FileStreamReader implements StreamReader {
-  name:string
-  opts: ReaderOpts
-  constructor(name:string, opts:ReaderOpts={}) {
-    this.name = name
-    this.opts = opts
+  name: string;
+  opts: ReaderOpts;
+  constructor(name: string, opts: ReaderOpts = {}) {
+    this.name = name;
+    this.opts = opts;
   }
-  get rootDir():string {
-    return join(this.opts.baseDir || Deno.cwd(), this.name+'.timestream')
+  get rootDir(): string {
+    return join(this.opts.baseDir || Deno.cwd(), this.name + ".timestream");
   }
-  private getPathForDate(date:Date):string {
-    return date.toISOString().split('T')[0].replace(/-/g, SEP)
+  private getPathForDate(date: Date): string {
+    return date.toISOString().split("T")[0].replace(/-/g, SEP);
   }
-  private getFiles(dir:string) {
-    const d = join(this.rootDir, dir)
+  private getFiles(dir: string) {
+    const d = join(this.rootDir, dir);
     try {
-      const files = []
+      const files = [];
       for (const f of Deno.readDirSync(d)) {
-        files.push(f)
+        files.push(f);
       }
+      // make sure they're lexicographically sorted
       return files.sort(function (a, b) {
         return a.name.localeCompare(b.name);
-      })
+      });
     } catch (err) {
-      if (err.name === 'NotFound') return []
-      throw err
+      if (err.name === "NotFound") return [];
+      throw err;
     }
   }
   private getYears() {
-    const years:string[] = []
+    const years: string[] = [];
     for (const f of Deno.readDirSync(join(this.rootDir))) {
-      if (f.isDirectory) years.push(f.name)
+      if (f.isDirectory) years.push(f.name);
     }
-    return years
+    return years;
   }
-  private async asPost(filename:string): Post {
-    const contentType = mime.lookup(filename)
+  private async asPost(filename: string): Post {
+    const contentType = mime.lookup(filename);
     const file = await Deno.open(join(this.rootDir, filename), { read: true });
     return {
       contentType,
-      body: file
-    }
+      body: file,
+    };
   }
-  async before(date?:Date):Promise<Post|undefined> {
-    if (!date) date = new Date()
+  async before(date?: Date): Promise<Post | undefined> {
+    if (!date) date = new Date();
 
-    const years = this.getYears()
-    const minYear = parseInt(years.sort().reverse()[0])
-    if (!years.includes(date.toISOString().split('-')[0])) return undefined
+    const years = this.getYears();
+    const minYear = parseInt(years.sort().reverse()[0]);
+    if (!years.includes(date.toISOString().split("-")[0])) return undefined;
 
-    let checkDate = new Date(date)
-    checkDate.setUTCHours(0)
-    checkDate.setUTCMinutes(0)
-    checkDate.setUTCSeconds(0)
-    checkDate.setUTCMilliseconds(0)
+    let checkDate = new Date(date);
+    checkDate.setUTCHours(0);
+    checkDate.setUTCMinutes(0);
+    checkDate.setUTCSeconds(0);
+    checkDate.setUTCMilliseconds(0);
 
     while (checkDate.getUTCFullYear() >= minYear) {
-      const pathPrefix = this.getPathForDate(checkDate)
-      const pathPrefixDateStr = pathPrefix.replace(/[/\\]/g,'-')
+      const pathPrefix = this.getPathForDate(checkDate);
+      const pathPrefixDateStr = pathPrefix.replace(/[/\\]/g, "-");
       // console.log("\nchecking prefix", pathPrefix)
-      const files = await this.getFiles(pathPrefix)
-      
+      const files = await this.getFiles(pathPrefix);
+
       for await (const f of files) {
         // parse time if present, check against date
-        const m = f.name.match(/^(\d{2})(\d{2})(\d{2})Z/)
-        let fileTime = checkDate
+        const m = f.name.match(/^(\d{2})(\d{2})(\d{2})Z/);
+        let fileTime = checkDate;
         if (m) {
-          const dateStr = `${pathPrefixDateStr}T${m[1]}:${m[2]}:${m[3]}Z`
-          fileTime = new Date(dateStr)
+          const dateStr = `${pathPrefixDateStr}T${m[1]}:${m[2]}:${m[3]}Z`;
+          fileTime = new Date(dateStr);
         }
         // console.log("file time is", fileTime, "looking before", date)
         if (fileTime < date) {
-          return this.asPost(join(pathPrefix, f.name))
+          return this.asPost(join(pathPrefix, f.name));
         }
       }
       // haven't found it yet, try the day before
-      checkDate = dayjs(checkDate).subtract(1, 'day').toDate()
+      checkDate = dayjs(checkDate).subtract(1, "day").toDate();
     }
 
-    
-    return undefined
+    return undefined;
   }
 }
