@@ -7,8 +7,6 @@ interface ReaderOpts {
   baseDir?: string
 }
 
-const dayFormat = 'YYYY/MM/dd'
-
 export class FileStreamReader implements StreamReader {
   name:string
   opts: ReaderOpts
@@ -24,7 +22,6 @@ export class FileStreamReader implements StreamReader {
   }
   private getFiles(dir:string) {
     const d = join(this.rootDir, dir)
-    // console.log("listing files in", d)
     try {
       const files = []
       for (const f of Deno.readDirSync(d)) {
@@ -33,7 +30,6 @@ export class FileStreamReader implements StreamReader {
       return files.sort(function (a, b) {
         return a.name.localeCompare(b.name);
       })
-    
     } catch (err) {
       if (err.name === 'NotFound') return []
       throw err
@@ -70,27 +66,24 @@ export class FileStreamReader implements StreamReader {
     while (checkDate.getUTCFullYear() >= minYear) {
       const pathPrefix = this.getPathForDate(checkDate)
       const pathPrefixDateStr = pathPrefix.replace(/[/\\]/g,'-')
-      console.log("\nchecking prefix", pathPrefix)
+      // console.log("\nchecking prefix", pathPrefix)
       const files = await this.getFiles(pathPrefix)
       
-      console.log("sorted files:", files)
       for await (const f of files) {
         // parse time if present, check against date
         const m = f.name.match(/^(\d{2})(\d{2})(\d{2})Z/)
         let fileTime = checkDate
         if (m) {
           const dateStr = `${pathPrefixDateStr}T${m[1]}:${m[2]}:${m[3]}Z`
-          console.log("parsing date", dateStr)
           fileTime = new Date(dateStr)
         }
-        console.log("file time is", fileTime, "looking before", date)
+        // console.log("file time is", fileTime, "looking before", date)
         if (fileTime < date) {
           return this.asPost(join(pathPrefix, f.name))
         }
       }
       // haven't found it yet, try the day before
       checkDate = dayjs(checkDate).subtract(1, 'day').toDate()
-      console.log("checkDate is now", checkDate.toISOString())
     }
 
     
