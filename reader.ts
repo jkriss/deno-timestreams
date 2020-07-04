@@ -7,6 +7,15 @@ interface ReaderOpts {
   baseDir?: string;
 }
 
+const timePattern = new RegExp(`(\\d{2})(\\d{2})(\\d{2})Z`);
+const dayPattern = new RegExp(`(\\d{4})(\\d{2})(\\d{2})`);
+const pathWithTimePattern = new RegExp(
+  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePattern}`,
+);
+const pathWithDatePattern = new RegExp(
+  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`,
+);
+
 export class FileStreamReader implements StreamReader {
   name: string;
   opts: ReaderOpts;
@@ -43,13 +52,43 @@ export class FileStreamReader implements StreamReader {
     }
     return years;
   }
-  private async asPost(filename: string): Post {
+  private async asPost(filename: string, date: Date | string): Post {
     const contentType = mime.lookup(filename);
-    const file = await Deno.open(join(this.rootDir, filename), { read: true });
+    const datePart = typeof date === "string"
+      ? date
+      : date.toISOString().split("T")[0].replace(/[-:]|\.\d+/g, "");
+    let namePart = undefined;
+    if (filename.match(pathWithTimePattern)) {
+      namePart = filename.replace(pathWithTimePattern, "");
+    } else {
+      namePart = filename.replace(pathWithDatePattern, "");
+    }
+    namePart = namePart.replace(/\.\w+$/, "");
+    const id = datePart + namePart;
     return {
+      id,
       contentType,
-      body: file,
+      getReader: () => {
+        return Deno.open(join(this.rootDir, filename), { read: true });
+      },
     };
+  }
+  async get(id: string): Promise<Post | undefined> {
+    const dayMatch = id.match(dayPattern);
+    if (!dayMatch) return undefined;
+    const dayDir = dayMatch.slice(1).join(SEP);
+    const m = id.match(timePattern);
+    const name = id.slice(16);
+    if (!m) return undefined;
+    const timePart = m[0];
+    const zeroTime = timePart === "000000Z";
+    const prefix = [timePart, name].join("-");
+    const files = await this.getFiles(dayDir);
+    for (const f of files) {
+      if (f.name.startsWith(prefix) || zeroTime && f.name.startsWith(name)) {
+        return this.asPost(f.name, dayDir.replace(/\D/g, ""));
+      }
+    }
   }
   async before(date?: Date): Promise<Post | undefined> {
     if (!date) date = new Date();
@@ -80,7 +119,7 @@ export class FileStreamReader implements StreamReader {
         }
         // console.log("file time is", fileTime, "looking before", date)
         if (fileTime < date) {
-          return this.asPost(join(pathPrefix, f.name));
+          return this.asPost(join(pathPrefix, f.name), fileTime);
         }
       }
       // haven't found it yet, try the day before
