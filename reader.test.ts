@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "https://deno.land/std/testing/asserts.ts";
 import { FileStreamReader } from "./reader.ts";
 
-const r = new FileStreamReader("posts");
+const r = new FileStreamReader({ path: "posts.timestream" });
 
 Deno.test("get latest post without a date", async () => {
   const post: Post = await r.before();
@@ -12,7 +12,7 @@ Deno.test("get latest post without a date", async () => {
   const text = new TextDecoder("utf-8").decode(bytes);
   if (text !== "with a timestamp") {
     throw Error(
-      `post body should be "with a timestamp", not ${JSON.stringify(text)}`,
+      `post body should be "with a timestamp", not ${JSON.stringify(text)}`
     );
   }
   body.close();
@@ -50,7 +50,7 @@ Deno.test("get post by id", async () => {
   assertEquals(
     post.id,
     samePost.id,
-    `ids should match: ${post.id} ${samePost.id}`,
+    `ids should match: ${post.id} ${samePost.id}`
   );
 });
 

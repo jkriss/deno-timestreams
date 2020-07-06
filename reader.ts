@@ -4,27 +4,27 @@ import mime from "https://cdn.pika.dev/mime-types@^2.1.27";
 import dayjs from "https://cdn.pika.dev/dayjs@^1.8.28";
 
 interface ReaderOpts {
-  baseDir?: string;
+  path?: string;
 }
 
 const timePattern = new RegExp(`(\\d{2})(\\d{2})(\\d{2})Z`);
 const dayPattern = new RegExp(`(\\d{4})(\\d{2})(\\d{2})`);
 const pathWithTimePattern = new RegExp(
-  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePattern}`,
+  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePattern}`
 );
 const pathWithDatePattern = new RegExp(
-  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`,
+  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`
 );
 
 export class FileStreamReader implements StreamReader {
-  name: string;
+  rootDir: string;
   opts: ReaderOpts;
-  constructor(name: string, opts: ReaderOpts = {}) {
-    this.name = name;
+  constructor(opts: ReaderOpts = {}) {
+    this.rootDir = opts.path || Deno.cwd();
+    if (this.rootDir.startsWith("file://")) {
+      this.rootDir = this.rootDir.replace(/^file:\/\//, "");
+    }
     this.opts = opts;
-  }
-  get rootDir(): string {
-    return join(this.opts.baseDir || Deno.cwd(), this.name + ".timestream");
   }
   private getPathForDate(date: Date): string {
     return date.toISOString().split("T")[0].replace(/-/g, SEP);
@@ -52,11 +52,15 @@ export class FileStreamReader implements StreamReader {
     }
     return years;
   }
-  private async asPost(filename: string, date: Date | string): Post {
-    const contentType = mime.lookup(filename);
-    const datePart = typeof date === "string"
-      ? date
-      : date.toISOString().split("T")[0].replace(/[-:]|\.\d+/g, "");
+  private async asPost(filename: string, date: Date | string): Promise<Post> {
+    const contentType = mime.lookup(filename) || "application/octet-stream";
+    const datePart =
+      typeof date === "string"
+        ? date
+        : date
+            .toISOString()
+            .split("T")[0]
+            .replace(/[-:]|\.\d+/g, "");
     let namePart = undefined;
     if (filename.match(pathWithTimePattern)) {
       namePart = filename.replace(pathWithTimePattern, "");
@@ -65,8 +69,10 @@ export class FileStreamReader implements StreamReader {
     }
     namePart = namePart.replace(/\.\w+$/, "");
     const id = datePart + namePart;
+    const dateObj = typeof date === "string" ? new Date(date) : date;
     return {
       id,
+      date: dateObj,
       contentType,
       getReader: () => {
         return Deno.open(join(this.rootDir, filename), { read: true });
@@ -85,7 +91,7 @@ export class FileStreamReader implements StreamReader {
     const prefix = [timePart, name].join("-");
     const files = await this.getFiles(dayDir);
     for (const f of files) {
-      if (f.name.startsWith(prefix) || zeroTime && f.name.startsWith(name)) {
+      if (f.name.startsWith(prefix) || (zeroTime && f.name.startsWith(name))) {
         return this.asPost(f.name, dayDir.replace(/\D/g, ""));
       }
     }
