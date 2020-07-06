@@ -1,6 +1,6 @@
 import { FileStreamReader } from "./reader.ts";
-import { StreamReader, Post } from "./types.ts";
-import { HttpHeaders, JsonHeaders } from "./headers.ts";
+import { StreamReader } from "./types.ts";
+import { HttpHeaders, JsonHeaders, GeminiHeaders } from "./headers.ts";
 import { HTTPStreamReader } from "./http/stream-reader.ts";
 
 interface StreamOptions {
@@ -40,7 +40,7 @@ export async function serve(opts?: StreamOptions) {
 
 export async function get(opts?: GetOptions) {
   if (!opts) opts = {};
-  // console.log("getting with opts", opts)
+
   const stream = getStream(opts);
   const output = Deno.stdout;
   const post = await stream.before();
@@ -51,6 +51,8 @@ export async function get(opts?: GetOptions) {
         h = new JsonHeaders(output);
       } else if (!opts.format || opts.format === "http") {
         h = new HttpHeaders(output);
+      } else if (opts.format === "gemini") {
+        h = new GeminiHeaders(output);
       } else {
         throw new Error(`Format ${opts.format} not recognized`);
       }
@@ -63,9 +65,8 @@ export async function get(opts?: GetOptions) {
     }
     if (!opts.headersOnly) {
       const body = await post.getReader();
-      const bytes = await Deno.readAll(body);
-      body.close();
-      Deno.stdout.write(bytes);
+      await Deno.copy(body, Deno.stdout);
+      await body.close();
     }
   } else {
     throw new Error(`Not found`);

@@ -1,4 +1,4 @@
-import { copyBytes } from "https://deno.land/std/bytes/mod.ts";
+import { fromStreamReader } from "https://deno.land/std/io/mod.ts";
 import { StreamReader, Post } from "../types.ts";
 import { parseLinkHeader } from "../link-header.ts";
 
@@ -45,21 +45,11 @@ export class HTTPStreamReader implements StreamReader {
         if (!res.body) throw new Error(`Post doesn't have a response body`);
         // adapt the body reader
         const resReader = res.body.getReader();
+        const r = fromStreamReader(resReader);
+        const close = () => resReader.cancel();
         return {
-          // TODO buffer if response chunk is larger than reader buffer
-          async read(p: Uint8Array): Promise<number | null> {
-            const chunk = await resReader.read();
-            if (chunk.done) return null;
-            if (chunk.value.length > p.length)
-              throw new Error(
-                `Response chunk of ${chunk.value.length} bytes is larger than read buffer of ${p.length} bytes`
-              );
-            copyBytes(chunk.value, p);
-            return chunk.value.length;
-          },
-          close() {
-            resReader.cancel();
-          },
+          read: r.read,
+          close,
         };
       },
     };

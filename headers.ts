@@ -29,7 +29,8 @@ export class HttpHeaders implements HeaderWriter {
     this.initPromise = this.startHeaders();
   }
   async startHeaders() {
-    await this._setHeader("Time-Streams-Version", "1");
+    await this.writer.write(new TextEncoder().encode(`HTTP/1.1 200 OK`));
+    await this.writer.write(this.CRLF);
     await this._setHeader("Date", new Date().toUTCString());
   }
   async setHeader(key: string, value: any) {
@@ -38,8 +39,9 @@ export class HttpHeaders implements HeaderWriter {
   }
 
   private async _setHeader(key: string, value: any) {
+    if (!value) return;
     const encoder = new TextEncoder();
-    let v = typeof value === 'string' ? value : undefined;
+    let v = typeof value === "string" ? value : undefined;
     if (value instanceof Date) v = value.toUTCString();
     else if (key.toLowerCase() === "link") v = stringify(value);
     else if (typeof value !== "string") v = JSON.stringify(value);
@@ -49,6 +51,38 @@ export class HttpHeaders implements HeaderWriter {
   async closeHeaders() {
     await this.initPromise;
     await this.writer.write(this.CRLF);
+    safeClose(this.writer);
+  }
+}
+
+export class GeminiHeaders implements HeaderWriter {
+  private writer: SimpleWriter;
+  private CRLF: Uint8Array;
+  private headers: SimpleHeaders;
+  private contentType: string;
+  constructor(writer: SimpleWriter) {
+    this.writer = writer;
+    this.headers = {};
+    this.contentType = "application/octet-stream";
+    this.CRLF = new TextEncoder().encode("\r\n");
+  }
+  async setHeader(key: string, value: any) {
+    if (key.toLowerCase() === "content-type") {
+      if (typeof value !== "string")
+        throw new Error(
+          `Content type must be a string, got ${JSON.stringify(value)}`
+        );
+      this.contentType = value;
+    } else {
+      this.headers[key] = value;
+    }
+  }
+  async closeHeaders() {
+    await this.writer.write(new TextEncoder().encode(`20 ${this.contentType}`));
+    await this.writer.write(this.CRLF);
+    if (this.contentType.startsWith("text/gemini")) {
+      // put the links in the body? or with any text type?
+    }
     safeClose(this.writer);
   }
 }

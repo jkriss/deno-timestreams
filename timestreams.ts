@@ -23,6 +23,7 @@ if (!cmd) {
       const url = args.source || args._[1];
       args.url = url;
       if (args['headers-only']) args.headersOnly = args['headers-only']
+      if (!args.headers && args.headersOnly) args.headers = true
       await Commands.get(Object.assign({}, args, { url }));
     } else {
       throw new Error(`No command "${cmd}"`);
