@@ -1,5 +1,6 @@
 {
   "cmds": {
-    "test": "deno test --allow-read"
+    "test": "deno test --allow-read",
+    "deploy": "rsync -avz . altcloud@tinyserver.club:webroot/code.strm.city/timestreams/"
   }
 }

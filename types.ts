@@ -8,7 +8,13 @@ export interface Post {
   id: string;
   date: Date;
   contentType: string;
+  links?: Link[];
   getReader(): Promise<Deno.Reader & Deno.Closer>;
+}
+
+export interface Link {
+  rel: string;
+  url: string;
 }
 
 export type PostHeaderName = "date" | "contentType";

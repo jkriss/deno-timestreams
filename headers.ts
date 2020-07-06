@@ -1,7 +1,9 @@
+import { stringify } from "./link-header.ts";
+
 type SimpleWriter = Deno.Writer & Deno.Closer & { rid?: number };
 
 export interface HeaderWriter {
-  setHeader(key: string, value: string): Promise<any>;
+  setHeader(key: string, value: any): Promise<any>;
   closeHeaders(): Promise<any>;
 }
 
@@ -30,14 +32,18 @@ export class HttpHeaders implements HeaderWriter {
     await this._setHeader("Time-Streams-Version", "1");
     await this._setHeader("Date", new Date().toUTCString());
   }
-  async setHeader(key: string, value: string) {
+  async setHeader(key: string, value: any) {
     await this.initPromise;
     return this._setHeader(key, value);
   }
 
-  private async _setHeader(key: string, value: string) {
+  private async _setHeader(key: string, value: any) {
     const encoder = new TextEncoder();
-    await this.writer.write(encoder.encode(`${key.toLowerCase()}: ${value}`));
+    let v = typeof value === 'string' ? value : undefined;
+    if (value instanceof Date) v = value.toUTCString();
+    else if (key.toLowerCase() === "link") v = stringify(value);
+    else if (typeof value !== "string") v = JSON.stringify(value);
+    await this.writer.write(encoder.encode(`${key.toLowerCase()}: ${v}`));
     await this.writer.write(this.CRLF);
   }
   async closeHeaders() {
@@ -54,8 +60,8 @@ export class JsonHeaders implements HeaderWriter {
     this.writer = writer;
     this.headers = {};
   }
-  async setHeader(key: string, value: string) {
-    this.headers[key.toLowerCase()] = value;
+  async setHeader(key: string, value: any) {
+    if (value) this.headers[key.toLowerCase()] = value;
   }
   async asObject() {
     return this.headers;
