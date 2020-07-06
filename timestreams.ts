@@ -3,7 +3,7 @@ import * as Commands from "./commands.ts";
 
 const help = `Usage:
 
-timestreams serve [--source <source url>]
+timestreams serve <source url>
 timestreams get [--format http | json | gemini] [--headers] [--headers-only] <url>
 timestreams archive <url> [path]`;
 
@@ -18,7 +18,8 @@ if (!cmd) {
 } else {
   try {
     if (cmd === "serve") {
-      await Commands.serve({ url: args.source });
+      const url = args.source || args._[1];
+      await Commands.serve({ url });
     } else if (cmd === "get") {
       const url = args.source || args._[1];
       args.url = url;

@@ -1,5 +1,6 @@
+import * as http from "https://deno.land/std/http/server.ts";
 import { FileStreamReader } from "./reader.ts";
-import { StreamReader } from "./types.ts";
+import { StreamReader, Post } from "./types.ts";
 import { HttpHeaders, JsonHeaders, GeminiHeaders } from "./headers.ts";
 import { HTTPStreamReader } from "./http/stream-reader.ts";
 
@@ -14,6 +15,7 @@ interface GetOptions extends StreamOptions {
   headers?: boolean;
   headersOnly?: boolean;
   format?: "http" | "json";
+  outputStream?: Deno.Writer & Deno.Closer;
 }
 
 function getStream(opts?: StreamOptions): StreamReader {
@@ -33,9 +35,20 @@ function getStream(opts?: StreamOptions): StreamReader {
 }
 
 export async function serve(opts?: StreamOptions) {
-  const stream = getStream(opts);
-  const first = await stream.before();
-  console.log("first post:", first);
+  const port = 8000;
+  const server = http.serve({ port });
+  console.log(`listening at http://localhost:${port}, opts`, opts);
+  for await (const req of server) {
+    const stream = getStream(opts);
+
+    const post: Post | undefined = await stream.before();
+    if (post) {
+      const body = await post.getReader();
+      req.respond({ body, headers: post.headers });
+    } else {
+      req.respond({ status: 404 });
+    }
+  }
 }
 
 export async function get(opts?: GetOptions) {
@@ -44,7 +57,7 @@ export async function get(opts?: GetOptions) {
   const proxyHeaders = ["content-length", "last-modified", "etag"];
 
   const stream = getStream(opts);
-  const output = Deno.stdout;
+  const output = opts.outputStream || Deno.stdout;
   const post = await stream.before();
   if (post) {
     if (opts?.headers) {
