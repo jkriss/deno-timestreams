@@ -1,6 +1,6 @@
 {
   "cmds": {
     "test": "deno test --allow-read",
-    "deploy": "rsync -avz . altcloud@tinyserver.club:webroot/code.strm.city/timestreams/"
+    "deploy": "rsync -avz --exclude .git --exclude deno.json . altcloud@tinyserver.club:webroot/code.strm.city/timestreams/"
   }
 }
