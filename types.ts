@@ -10,6 +10,7 @@ export interface Post {
   contentType: string;
   links?: Link[];
   getReader(): Promise<Deno.Reader & Deno.Closer>;
+  version: string;
 }
 
 export interface Link {

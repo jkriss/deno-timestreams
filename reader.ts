@@ -72,6 +72,7 @@ export class FileStreamReader implements StreamReader {
     const dateObj = typeof date === "string" ? new Date(date) : date;
     return {
       id,
+      version: "1",
       date: dateObj,
       contentType,
       getReader: () => {
