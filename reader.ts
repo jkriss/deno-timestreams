@@ -1,5 +1,6 @@
 import { StreamReader, Post } from "./types.ts";
 import { SEP, join } from "https://deno.land/std/path/mod.ts";
+import { createHash } from "https://deno.land/std/hash/mod.ts";
 import mime from "https://cdn.pika.dev/mime-types@^2.1.27";
 import dayjs from "https://cdn.pika.dev/dayjs@^1.8.28";
 
@@ -70,13 +71,27 @@ export class FileStreamReader implements StreamReader {
     namePart = namePart.replace(/\.\w+$/, "");
     const id = datePart + namePart;
     const dateObj = typeof date === "string" ? new Date(date) : date;
+    const fullPath = join(this.rootDir, filename);
+    const stats = await Deno.lstat(fullPath);
+    const headers = new Headers({
+      "content-length": `${stats.size}`,
+    });
+    if (stats.mtime) {
+      const modified = stats.mtime.toUTCString();
+      headers.set("last-modified", modified);
+      const hash = createHash("sha256");
+      hash.update(modified);
+      hash.update(fullPath);
+      headers.set("etag", `W/"${hash.toString('base64')}"`);
+    }
     return {
       id,
       version: "1",
       date: dateObj,
       contentType,
+      headers,
       getReader: () => {
-        return Deno.open(join(this.rootDir, filename), { read: true });
+        return Deno.open(fullPath, { read: true });
       },
     };
   }
@@ -93,7 +108,7 @@ export class FileStreamReader implements StreamReader {
     const files = await this.getFiles(dayDir);
     for (const f of files) {
       if (f.name.startsWith(prefix) || (zeroTime && f.name.startsWith(name))) {
-        return this.asPost(f.name, dayDir.replace(/\D/g, ""));
+        return this.asPost(join(dayDir, f.name), dayDir.replace(/\D/g, ""));
       }
     }
   }

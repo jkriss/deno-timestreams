@@ -35,10 +35,12 @@ export class HTTPStreamReader implements StreamReader {
     const pathParts = self && new URL(self.url, url).pathname.split("/");
     const id = pathParts && pathParts[pathParts.length - 1];
     if (!id) throw new Error(`Couldn't get post id from Link header`);
+
     const post: Post = {
       id,
       date: new Date(postTime),
       contentType,
+      headers: res.headers,
       version,
       links: link,
       getReader: async () => {

@@ -1,14 +1,11 @@
 import { stringify } from "./link-header.ts";
+import { SimpleHeaders } from "./types.ts"
 
 type SimpleWriter = Deno.Writer & Deno.Closer & { rid?: number };
 
 export interface HeaderWriter {
   setHeader(key: string, value: any): Promise<any>;
   closeHeaders(): Promise<any>;
-}
-
-export interface SimpleHeaders {
-  [k: string]: string;
 }
 
 function safeClose(writer: SimpleWriter) {

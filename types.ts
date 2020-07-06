@@ -9,6 +9,7 @@ export interface Post {
   date: Date;
   contentType: string;
   links?: Link[];
+  headers?: Headers;
   getReader(): Promise<Deno.Reader & Deno.Closer>;
   version: string;
 }
@@ -16,6 +17,10 @@ export interface Post {
 export interface Link {
   rel: string;
   url: string;
+}
+
+export interface SimpleHeaders {
+  [k: string]: string;
 }
 
 export type PostHeaderName = "date" | "contentType";

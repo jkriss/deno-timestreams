@@ -4,7 +4,7 @@ import { FileStreamReader } from "./reader.ts";
 const r = new FileStreamReader({ path: "posts.timestream" });
 
 Deno.test("get latest post without a date", async () => {
-  const post: Post = await r.before();
+  const post = await r.before();
   if (!post) throw Error(`should get a post`);
   const body = await post.getReader();
   if (!body) throw Error(`post should have a body`);
@@ -19,7 +19,7 @@ Deno.test("get latest post without a date", async () => {
 });
 
 Deno.test("get latest post before a time", async () => {
-  const post: Post = await r.before(new Date("2020-07-01T05:11:21Z"));
+  const post = await r.before(new Date("2020-07-01T05:11:21Z"));
   if (!post) throw Error(`should get a post`);
   const body = await post.getReader();
   if (!body) throw Error(`post should have a body`);
@@ -42,7 +42,7 @@ Deno.test("return null for years after the stream", async () => {
 });
 
 Deno.test("get post by id", async () => {
-  const post: Post = await r.before();
+  const post = await r.before();
   assert(post, "should get a post");
   assert(post.id, "post should have an id");
   const samePost = await r.get(post.id);

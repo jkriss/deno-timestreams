@@ -41,6 +41,8 @@ export async function serve(opts?: StreamOptions) {
 export async function get(opts?: GetOptions) {
   if (!opts) opts = {};
 
+  const proxyHeaders = ["content-length", "last-modified", "etag"];
+
   const stream = getStream(opts);
   const output = Deno.stdout;
   const post = await stream.before();
@@ -61,6 +63,11 @@ export async function get(opts?: GetOptions) {
       await h.setHeader("post-time", post.date);
       await h.setHeader("content-type", post.contentType);
       await h.setHeader("time-streams-version", post.version);
+      if (post.headers) {
+        for (const [k, v] of post.headers.entries()) {
+          if (proxyHeaders.includes(k)) await h.setHeader(k, v);
+        }
+      }
       await h.closeHeaders();
     }
     if (!opts.headersOnly) {
