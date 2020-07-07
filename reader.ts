@@ -89,6 +89,9 @@ export class FileStreamReader implements StreamReader {
       version: "1",
       date: dateObj,
       contentType,
+      links: [
+        { url: id, rel: 'self' }
+      ],
       headers,
       getReader: () => {
         return Deno.open(fullPath, { read: true });

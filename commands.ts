@@ -1,7 +1,12 @@
 import * as http from "https://deno.land/std/http/server.ts";
 import { FileStreamReader } from "./reader.ts";
 import { StreamReader, Post } from "./types.ts";
-import { HttpHeaders, JsonHeaders, GeminiHeaders } from "./headers.ts";
+import {
+  HttpHeaders,
+  JsonHeaders,
+  GeminiHeaders,
+  getHTTPHeader,
+} from "./headers.ts";
 import { HTTPStreamReader } from "./http/stream-reader.ts";
 
 interface StreamOptions {
@@ -43,8 +48,33 @@ export async function serve(opts?: StreamOptions) {
 
     const post: Post | undefined = await stream.before();
     if (post) {
+      if (post.links) {
+        // only returning the absolute url paths,
+        // so this part won't make it back to the client
+        const url = new URL(req.url, 'http://localhost')
+        for (const link of post.links) {
+          if (!link.url.startsWith('http') && !link.url.startsWith('/')) {
+            link.url = `${url.pathname}${link.url}`
+          }
+        }
+      }
+      const headers = post.headers || new Headers();
+      function set(k: string, v: any) {
+        const val = getHTTPHeader(k, v);
+        if (val) headers.set(k, val);
+      }
+      const h = [
+        ["content-type", post.contentType],
+        ["post-time", post.date],
+        ["time-streams-version", post.version],
+        ["link", post.links],
+      ];
+      set("content-type", post.contentType);
+      set("post-time", post.date);
+      set("time-streams-version", post.version);
+      set("link", post.links);
       const body = await post.getReader();
-      req.respond({ body, headers: post.headers });
+      req.respond({ body, headers });
     } else {
       req.respond({ status: 404 });
     }

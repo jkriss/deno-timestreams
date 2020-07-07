@@ -1,5 +1,5 @@
 import { stringify } from "./link-header.ts";
-import { SimpleHeaders } from "./types.ts"
+import { SimpleHeaders } from "./types.ts";
 
 type SimpleWriter = Deno.Writer & Deno.Closer & { rid?: number };
 
@@ -14,6 +14,15 @@ function safeClose(writer: SimpleWriter) {
   } else {
     writer.close();
   }
+}
+
+export function getHTTPHeader(key: string, value: any) {
+  if (typeof value === "undefined") return;
+  let v = typeof value === "string" ? value : undefined;
+  if (value instanceof Date) v = value.toUTCString();
+  else if (key.toLowerCase() === "link") v = stringify(value);
+  else if (typeof value !== "string") v = JSON.stringify(value);
+  return v;
 }
 
 export class HttpHeaders implements HeaderWriter {
@@ -38,10 +47,7 @@ export class HttpHeaders implements HeaderWriter {
   private async _setHeader(key: string, value: any) {
     if (!value) return;
     const encoder = new TextEncoder();
-    let v = typeof value === "string" ? value : undefined;
-    if (value instanceof Date) v = value.toUTCString();
-    else if (key.toLowerCase() === "link") v = stringify(value);
-    else if (typeof value !== "string") v = JSON.stringify(value);
+    const v = getHTTPHeader(key, value);
     await this.writer.write(encoder.encode(`${key.toLowerCase()}: ${v}`));
     await this.writer.write(this.CRLF);
   }
