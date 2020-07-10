@@ -1,4 +1,4 @@
-import { StreamReader, Post } from "./types.ts";
+import { StreamReader, Post, Relation } from "./types.ts";
 import { SEP, join } from "https://deno.land/std/path/mod.ts";
 import { createHash } from "https://deno.land/std/hash/mod.ts";
 import mime from "https://cdn.pika.dev/mime-types@^2.1.27";
@@ -17,6 +17,7 @@ const pathWithTimePattern = new RegExp(
 const pathWithDatePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`
 );
+const relationFilePattern = /\$(\w+)\.(\w+)$/
 
 export class FileStreamReader implements StreamReader {
   rootDir: string;
@@ -68,7 +69,7 @@ export class FileStreamReader implements StreamReader {
       namePart = filename.replace(pathWithDatePattern, "");
       namePart = timePart + "-" + namePart;
     }
-    namePart = namePart.replace(/\.\w+$/, "");
+    // namePart = namePart.replace(/\.\w+$/, "");
     const id = datePart + namePart;
     const fullPath = join(this.rootDir, filename);
     const stats = await Deno.lstat(fullPath);
@@ -145,15 +146,36 @@ export class FileStreamReader implements StreamReader {
       }
     }
   }
+  async relations(id: string): Promise<Relation[]> {
+    const parsedId = this.parseId(id);
+    if (!parsedId) return [];
+    const results: Relation[] = [];
+    const { dayDir, date, matches } = parsedId;
+    const files = await this.getFiles(dayDir);
+    for (const f of files) {
+      if (matches(f.name)) {
+        const m = f.name.match(relationFilePattern);
+        if (m) {
+          const [suffix, rel, ext] = m;
+          const relId = id + suffix;
+          const type = mime.lookup(ext) || "application/octet-stream";
+          results.push({ id: relId, rel, type });
+        }
+      }
+    }
+    return results;
+  }
   async previous(id: string): Promise<Post | undefined> {
     // first, see if there's anything with the same time stamp
     const parsedId = this.parseId(id);
     if (!parsedId) return undefined;
     const { dayDir, matches, date } = parsedId;
-    const dayFiles = await this.getFiles(dayDir);
+    let dayFiles = await this.getFiles(dayDir);
+    // exclude relation files from the list to check
+    dayFiles = dayFiles.filter(f => !f.name.match(relationFilePattern))
     for (const [i, f] of dayFiles.entries()) {
-      if (matches(f.name) && dayFiles.length > i) {
-        return this.asPost(join(dayDir, dayFiles[i + 1].name), date);
+      if (matches(f.name) && dayFiles.length > i+1) {
+        return this.asPost(join(dayDir, dayFiles[i + 1].name), date);  
       }
     }
     // otherwise, get the most recent one before this date

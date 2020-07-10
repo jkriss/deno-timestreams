@@ -4,6 +4,13 @@ export interface StreamReader {
   previousId(id: string): Promise<string | undefined>;
   before(): Promise<Post | undefined>;
   before(date?: Date): Promise<Post | undefined>;
+  relations(id:string): Promise<Relation[]>
+}
+
+export interface Relation {
+  id: string
+  rel: string
+  type: string
 }
 
 export interface Post {

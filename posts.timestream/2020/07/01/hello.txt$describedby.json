@@ -1,0 +1,8 @@
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "author": {
+    "@type": "Person",
+    "name": "Jesse Kriss"
+  }
+}

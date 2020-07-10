@@ -69,3 +69,36 @@ Deno.test("get previous post", async () => {
   assert(prev, "another previous post should exist");
   assert(prev.id !== post.id, "posts should have different ids");
 });
+
+Deno.test("get related data for post", async () => {
+  const post = await r.get("20200701000000Z-hello.txt")
+  assert(post, "should get a post")
+  const related = await r.relations("20200701000000Z-hello.txt")
+  const textMeta = related.find(r => r.rel === 'describedby' && r.type === 'text/plain')
+  const jsonMeta = related.find(r => r.rel === 'describedby' && r.type === 'application/json')
+  assert(textMeta, "text meta should exist")
+  assert(jsonMeta, "text meta should exist")
+  const m = await r.get(jsonMeta.id)
+  assert(m, "actual entry should exist")
+  if (m) {
+    const reader = await m.getReader()
+    const bytes = await Deno.readAll(reader)
+    reader.close()
+    const json = JSON.parse(new TextDecoder().decode(bytes))
+    assertEquals(json.author.name, 'Jesse Kriss')
+  }
+})
+
+Deno.test("don't show relations in the main feed", async() => {
+  let post = await r.before()
+  assert(post, "first post should exist")
+  assert(!post.id.includes('$'), "No $ in date query ids")
+  for (let i=0; i<4; i++) {
+    if (post) {
+      post = await r.previous(post.id)
+      assert(post && !post.id.includes('$'), "No $ in previous post ids")
+    } else {
+      assert(false, "should have a post")
+    }
+  }
+})
