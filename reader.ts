@@ -8,10 +8,11 @@ interface ReaderOpts {
   path?: string;
 }
 
-const timePattern = new RegExp(`(\\d{2})(\\d{2})(\\d{2})Z`);
+const timePatternStr = `(\\d{2})(\\d{2})(\\d{2})Z`;
+const timePattern = new RegExp(timePatternStr);
 const dayPattern = new RegExp(`(\\d{4})(\\d{2})(\\d{2})`);
 const pathWithTimePattern = new RegExp(
-  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePattern}`
+  `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePatternStr}`
 );
 const pathWithDatePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`
@@ -53,24 +54,22 @@ export class FileStreamReader implements StreamReader {
     }
     return years;
   }
-  private async asPost(filename: string, date: Date | string): Promise<Post> {
+  private async asPost(filename: string, date: Date): Promise<Post> {
     const contentType = mime.lookup(filename) || "application/octet-stream";
-    const datePart =
-      typeof date === "string"
-        ? date
-        : date
-            .toISOString()
-            .split("T")[0]
-            .replace(/[-:]|\.\d+/g, "");
+    let [datePart, timePart] = date
+      .toISOString()
+      .split("T")
+      .map((part) => part.replace(/[-:]|\.\d+/g, ""));
     let namePart = undefined;
     if (filename.match(pathWithTimePattern)) {
       namePart = filename.replace(pathWithTimePattern, "");
+      namePart = timePart + namePart;
     } else {
       namePart = filename.replace(pathWithDatePattern, "");
+      namePart = timePart + "-" + namePart;
     }
     namePart = namePart.replace(/\.\w+$/, "");
     const id = datePart + namePart;
-    const dateObj = typeof date === "string" ? new Date(date) : date;
     const fullPath = join(this.rootDir, filename);
     const stats = await Deno.lstat(fullPath);
     const headers = new Headers({
@@ -82,23 +81,21 @@ export class FileStreamReader implements StreamReader {
       const hash = createHash("sha256");
       hash.update(modified);
       hash.update(fullPath);
-      headers.set("etag", `W/"${hash.toString('base64')}"`);
+      headers.set("etag", `W/"${hash.toString("base64")}"`);
     }
     return {
       id,
       version: "1",
-      date: dateObj,
+      date,
       contentType,
-      links: [
-        { url: id, rel: 'self' }
-      ],
+      links: [{ url: id, rel: "self" }],
       headers,
       getReader: () => {
         return Deno.open(fullPath, { read: true });
       },
     };
   }
-  async get(id: string): Promise<Post | undefined> {
+  private parseId(id: string) {
     const dayMatch = id.match(dayPattern);
     if (!dayMatch) return undefined;
     const dayDir = dayMatch.slice(1).join(SEP);
@@ -108,12 +105,63 @@ export class FileStreamReader implements StreamReader {
     const timePart = m[0];
     const zeroTime = timePart === "000000Z";
     const prefix = [timePart, name].join("-");
+
+    // get a date from it, too
+    const dm = `${dayDir}${SEP}${timePart}`.match(pathWithTimePattern);
+    if (!dm) return undefined;
+    const [_, year, month, day, hour, minute, second] = dm;
+    const date = new Date(
+      Date.UTC(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute),
+        parseInt(second)
+      )
+    );
+
+    return {
+      dayDir,
+      name,
+      timePart,
+      date,
+      prefix,
+      matches: (filename: string) => {
+        return (
+          filename.startsWith(prefix) || (zeroTime && filename.startsWith(name))
+        );
+      },
+    };
+  }
+  async get(id: string): Promise<Post | undefined> {
+    const parsedId = this.parseId(id);
+    if (!parsedId) return undefined;
+    const { dayDir, date, matches } = parsedId;
     const files = await this.getFiles(dayDir);
     for (const f of files) {
-      if (f.name.startsWith(prefix) || (zeroTime && f.name.startsWith(name))) {
-        return this.asPost(join(dayDir, f.name), dayDir.replace(/\D/g, ""));
+      if (matches(f.name)) {
+        return this.asPost(join(dayDir, f.name), date);
       }
     }
+  }
+  async previous(id: string): Promise<Post | undefined> {
+    // first, see if there's anything with the same time stamp
+    const parsedId = this.parseId(id);
+    if (!parsedId) return undefined;
+    const { dayDir, matches, date } = parsedId;
+    const dayFiles = await this.getFiles(dayDir);
+    for (const [i, f] of dayFiles.entries()) {
+      if (matches(f.name) && dayFiles.length > i) {
+        return this.asPost(join(dayDir, dayFiles[i + 1].name), date);
+      }
+    }
+    // otherwise, get the most recent one before this date
+    return this.before(date);
+  }
+  async previousId(id: string): Promise<string | undefined> {
+    const p = await this.previous(id);
+    return p ? p.id : undefined;
   }
   async before(date?: Date): Promise<Post | undefined> {
     if (!date) date = new Date();
@@ -131,7 +179,6 @@ export class FileStreamReader implements StreamReader {
     while (checkDate.getUTCFullYear() >= minYear) {
       const pathPrefix = this.getPathForDate(checkDate);
       const pathPrefixDateStr = pathPrefix.replace(/[/\\]/g, "-");
-      // console.log("\nchecking prefix", pathPrefix)
       const files = await this.getFiles(pathPrefix);
 
       for await (const f of files) {
@@ -142,7 +189,6 @@ export class FileStreamReader implements StreamReader {
           const dateStr = `${pathPrefixDateStr}T${m[1]}:${m[2]}:${m[3]}Z`;
           fileTime = new Date(dateStr);
         }
-        // console.log("file time is", fileTime, "looking before", date)
         if (fileTime < date) {
           return this.asPost(join(pathPrefix, f.name), fileTime);
         }

@@ -10,6 +10,20 @@ export class HTTPStreamReader implements StreamReader {
   async get(id: string): Promise<Post | undefined> {
     return this.getUrl(new URL(`${this.url.href}/${id}`));
   }
+  async previous(id: string): Promise<Post | undefined> {
+    const prevId = await this.previousId(id);
+    if (prevId) {
+      return this.get(prevId);
+    }
+  }
+  async previousId(id: string): Promise<string | undefined> {
+    const p = await this.get(id);
+    if (p) {
+      const prevLink =
+        p.links && p.links.find((link) => link.rel === "previous");
+      return prevLink ? prevLink.url : undefined;
+    }
+  }
   async before(date?: Date): Promise<Post | undefined> {
     let url = this.url.href;
     if (date) url += `?before=${date.toISOString()}`;

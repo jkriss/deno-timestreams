@@ -1,5 +1,7 @@
 export interface StreamReader {
   get(id: string): Promise<Post | undefined>;
+  previous(id: string): Promise<Post | undefined>;
+  previousId(id: string): Promise<string | undefined>;
   before(): Promise<Post | undefined>;
   before(date?: Date): Promise<Post | undefined>;
 }

@@ -58,3 +58,14 @@ Deno.test("get prefix-less post by id", async () => {
   const post = await r.get("20200701000000Z-hello");
   assert(post, "should get a post");
 });
+
+Deno.test("get previous post", async () => {
+  const post = await r.before();
+  assert(post, "should get a post");
+  let prev = await r.previous(post.id);
+  assert(prev, "previous post should exist");
+  assert(prev.id !== post.id, "posts should have different ids");
+  prev = await r.previous(prev.id);
+  assert(prev, "another previous post should exist");
+  assert(prev.id !== post.id, "posts should have different ids");
+});

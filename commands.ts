@@ -44,20 +44,27 @@ export async function serve(opts?: StreamOptions) {
   const server = http.serve({ port });
   console.log(`listening at http://localhost:${port}, opts`, opts);
   for await (const req of server) {
+    console.log("req:", req.url);
     const stream = getStream(opts);
 
     const post: Post | undefined = await stream.before();
     if (post) {
       if (post.links) {
+        const prevId = await stream.previousId(post.id);
+        // console.log("!! seeing prev id", prevId, "adding to links", post.links);
+        if (prevId && !post.links.find((l) => l.rel === "previous"))
+          post.links.push({ url: prevId, rel: "previous" });
         // only returning the absolute url paths,
         // so this part won't make it back to the client
-        const url = new URL(req.url, 'http://localhost')
+        const url = new URL(req.url, "http://localhost");
         for (const link of post.links) {
-          if (!link.url.startsWith('http') && !link.url.startsWith('/')) {
-            link.url = `${url.pathname}${link.url}`
-          }
+          // console.log("handling link", link, "adding prefix", url.pathname);
+          // if (!link.url.startsWith("http") && !link.url.startsWith("/")) {
+          //   link.url = `${url.pathname}${link.url}`;
+          // }
         }
       }
+      console.log("links now", post.links);
       const headers = post.headers || new Headers();
       function set(k: string, v: any) {
         const val = getHTTPHeader(k, v);
@@ -101,7 +108,16 @@ export async function get(opts?: GetOptions) {
       } else {
         throw new Error(`Format ${opts.format} not recognized`);
       }
-      // TODO implement previous post lookup
+      const prevId = await stream.previousId(post.id);
+      if (prevId) {
+        if (!post.links) post.links = [];
+        if (!post.links.find(l => l.rel === 'previous')) {
+          post.links.push({
+            rel: "previous",
+            url: prevId,
+          });  
+        }
+      }
       await h.setHeader("link", post.links);
       await h.setHeader("post-time", post.date);
       await h.setHeader("content-type", post.contentType);
