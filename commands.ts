@@ -8,6 +8,7 @@ import {
   getHTTPHeader,
 } from "./headers.ts";
 import { HTTPStreamReader } from "./http/stream-reader.ts";
+import { encode, decode } from './id-encoder.ts'
 
 interface StreamOptions {
   url?: string;
@@ -57,7 +58,7 @@ export async function serve(opts?: StreamOptions) {
     postId = parts[parts.length - 1];
 
     const post: Post | undefined = postId
-      ? await stream.get(postId)
+      ? await stream.get(decode(postId))
       : await stream.before(before);
     if (post) {
       if (post.links) {
@@ -68,6 +69,10 @@ export async function serve(opts?: StreamOptions) {
           // if (!link.url.startsWith("http") && !link.url.startsWith("/")) {
           //   link.url = `${url.pathname}${link.url}`;
           // }
+          // if it's a plain id, encode it
+          if (!link.url.includes('/')) {
+            link.url = encode(link.url)
+          }
         }
       }
       const headers = post.headers || new Headers();
