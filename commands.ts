@@ -44,18 +44,19 @@ export async function serve(opts?: StreamOptions) {
   const server = http.serve({ port });
   console.log(`listening at http://localhost:${port}, opts`, opts);
   for await (const req of server) {
-    const start = performance.now()
-    console.log("req:", req.url);
+    const start = performance.now();
     const stream = getStream(opts);
 
-    let postId:string|undefined
-    if (req.url.includes('/')) {
-      const parts = req.url.split('/')
-      postId = parts[parts.length-1]
+    let postId: string | undefined;
+    if (req.url.includes("/")) {
+      const parts = req.url.split("/");
+      postId = parts[parts.length - 1];
     }
-    console.log("post id is", postId)
+    console.log("post id is", postId);
 
-    const post: Post | undefined = postId ? await stream.get(postId) : await stream.before();
+    const post: Post | undefined = postId
+      ? await stream.get(postId)
+      : await stream.before();
     if (post) {
       if (post.links) {
         // only returning the absolute url paths,
@@ -88,7 +89,7 @@ export async function serve(opts?: StreamOptions) {
     } else {
       req.respond({ status: 404 });
     }
-    console.log(`-- handled request in ${performance.now()-start}ms --`)
+    console.log(`-- handled request in ${performance.now() - start}ms --`);
   }
 }
 

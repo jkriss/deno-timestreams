@@ -10,7 +10,7 @@ interface ReaderOpts {
 
 const timePatternStr = `(\\d{2})(\\d{2})(\\d{2})Z`;
 const timePattern = new RegExp(timePatternStr);
-const startsWithTimePattern = new RegExp(`^${timePatternStr}`)
+const startsWithTimePattern = new RegExp(`^${timePatternStr}`);
 const dayPattern = new RegExp(`(\\d{4})(\\d{2})(\\d{2})`);
 const pathWithTimePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePatternStr}`
@@ -18,9 +18,9 @@ const pathWithTimePattern = new RegExp(
 const pathWithDatePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`
 );
-const relationFilePattern = /\$(\w+)\.(\w+)$/
+const relationFilePattern = /\$(\w+)\.(\w+)$/;
 
-function zeroTime(d:Date) {
+function zeroTime(d: Date) {
   d.setUTCHours(0);
   d.setUTCMinutes(0);
   d.setUTCSeconds(0);
@@ -63,7 +63,11 @@ export class FileStreamReader implements StreamReader {
     }
     return years;
   }
-  private async asPost(filename: string, date: Date): Promise<Post> {
+  private async asPost(
+    filename: string,
+    date: Date,
+    idOnly?: boolean
+  ): Promise<Post> {
     const contentType = mime.lookup(filename) || "application/octet-stream";
     let [datePart, timePart] = date
       .toISOString()
@@ -78,6 +82,16 @@ export class FileStreamReader implements StreamReader {
       namePart = timePart + "-" + namePart;
     }
     const id = datePart + namePart;
+    if (idOnly)
+      return {
+        id,
+        date,
+        contentType: "",
+        version: "1",
+        getReader: async () => {
+          throw new Error(`Can't get a reader for an id-only result`);
+        },
+      };
     const fullPath = join(this.rootDir, filename);
     const stats = await Deno.lstat(fullPath);
     const headers = new Headers({
@@ -91,10 +105,12 @@ export class FileStreamReader implements StreamReader {
       hash.update(fullPath);
       headers.set("etag", `W/"${hash.toString("base64")}"`);
     }
-    const links = await this.relations(id)
-    const previousId = await this.previousId(id)
-    if (previousId) links.unshift({ url: previousId, rel: "previous" })
-    links.unshift({ url: id, rel: "self" })
+    const links = await this.relations(id);
+    if (!id.match(relationFilePattern)) {
+      const previousId = await this.previousId(id);
+      if (previousId) links.unshift({ url: previousId, rel: "previous" });
+    }
+    links.unshift({ url: id, rel: "self" });
 
     return {
       id,
@@ -177,26 +193,29 @@ export class FileStreamReader implements StreamReader {
     }
     return results;
   }
-  async previous(id: string): Promise<Post | undefined> {
+  async previous(id: string, idOnly?: boolean): Promise<Post | undefined> {
+    // relation aren't part of the time chain
+    if (id.match(relationFilePattern)) return;
     // first, see if there's anything with the same time stamp
     const parsedId = this.parseId(id);
     if (!parsedId) return undefined;
     const { dayDir, matches, date } = parsedId;
     let dayFiles = await this.getFiles(dayDir);
     // exclude relation files from the list to check
-    dayFiles = dayFiles.filter(f => !f.name.match(relationFilePattern))
+    dayFiles = dayFiles.filter((f) => !f.name.match(relationFilePattern));
     for (const [i, f] of dayFiles.entries()) {
-      if (matches(f.name) && dayFiles.length > i+1) {
-        const previousName = dayFiles[i + 1].name
-        if (!previousName.match(startsWithTimePattern)) zeroTime(date)
-        return this.asPost(join(dayDir, previousName), date);  
+      if (matches(f.name) && dayFiles.length > i + 1) {
+        const previousName = dayFiles[i + 1].name;
+        if (!previousName.match(startsWithTimePattern)) zeroTime(date);
+        return this.asPost(join(dayDir, previousName), date, idOnly);
       }
     }
     // otherwise, get the most recent one before this date
-    return this.before(date);
+    const prev = this.before(date);
+    return prev;
   }
   async previousId(id: string): Promise<string | undefined> {
-    const p = await this.previous(id);
+    const p = await this.previous(id, true);
     return p ? p.id : undefined;
   }
   async before(date?: Date): Promise<Post | undefined> {
