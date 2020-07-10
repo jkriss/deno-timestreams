@@ -156,10 +156,15 @@ export class FileStreamReader implements StreamReader {
       timePart,
       date,
       prefix,
-      matches: (filename: string) => {
-        return (
-          filename.startsWith(prefix) || (zeroTime && filename.startsWith(name))
-        );
+      matches: (filename: string, exact?: boolean) => {
+        if (exact) {
+          return filename === prefix || (zeroTime && filename === name);
+        } else {
+          return (
+            filename.startsWith(prefix) ||
+            (zeroTime && filename.startsWith(name))
+          );
+        }
       },
     };
   }
@@ -169,7 +174,7 @@ export class FileStreamReader implements StreamReader {
     const { dayDir, date, matches } = parsedId;
     const files = await this.getFiles(dayDir);
     for (const f of files) {
-      if (matches(f.name)) {
+      if (matches(f.name, true)) {
         return this.asPost(join(dayDir, f.name), date);
       }
     }

@@ -56,7 +56,7 @@ Deno.test("get post by id", async () => {
 });
 
 Deno.test("get prefix-less post by id", async () => {
-  const post = await r.get("20200701000000Z-hello");
+  const post = await r.get("20200701000000Z-hello.txt");
   assert(post, "should get a post");
 });
 
