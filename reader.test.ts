@@ -1,7 +1,8 @@
 import { assert, assertEquals } from "https://deno.land/std/testing/asserts.ts";
 import { FileStreamReader } from "./reader.ts";
+import { StreamReader } from "./types.ts";
 
-const r = new FileStreamReader({ path: "posts.timestream" });
+const r:StreamReader = new FileStreamReader({ path: "posts.timestream" });
 
 Deno.test("get latest post without a date", async () => {
   const post = await r.before();
@@ -73,12 +74,11 @@ Deno.test("get previous post", async () => {
 Deno.test("get related data for post", async () => {
   const post = await r.get("20200701000000Z-hello.txt")
   assert(post, "should get a post")
-  const related = await r.relations("20200701000000Z-hello.txt")
-  const textMeta = related.find(r => r.rel === 'describedby' && r.type === 'text/plain')
-  const jsonMeta = related.find(r => r.rel === 'describedby' && r.type === 'application/json')
+  const textMeta = post.links?.find(r => r.rel === 'describedby' && r.type === 'text/plain')
+  const jsonMeta = post.links?.find(r => r.rel === 'describedby' && r.type === 'application/json')
   assert(textMeta, "text meta should exist")
   assert(jsonMeta, "text meta should exist")
-  const m = await r.get(jsonMeta.id)
+  const m = await r.get(jsonMeta.url)
   assert(m, "actual entry should exist")
   if (m) {
     const reader = await m.getReader()
@@ -93,12 +93,20 @@ Deno.test("don't show relations in the main feed", async() => {
   let post = await r.before()
   assert(post, "first post should exist")
   assert(!post.id.includes('$'), "No $ in date query ids")
-  for (let i=0; i<4; i++) {
+  for (let i=0; i<3; i++) {
     if (post) {
       post = await r.previous(post.id)
-      assert(post && !post.id.includes('$'), "No $ in previous post ids")
+      assert(post && !post.id.includes('$'), `No $ in previous post ids, got ${post?.id}`)
     } else {
       assert(false, "should have a post")
     }
   }
+})
+
+Deno.test("correct time on previous link lookup without a time component", async() => {
+  const post = await r.get("20200701051121Z-at-a-time.txt")
+  assert(post, "should get a post")
+  const previous = post.links?.find(link => link.rel === 'previous')
+  assert(previous, "should have a previous link")
+  assertEquals(previous.url, "20200701000000Z-hello.txt")
 })

@@ -1,4 +1,4 @@
-import { StreamReader, Post, Relation } from "./types.ts";
+import { StreamReader, Post, Link } from "./types.ts";
 import { SEP, join } from "https://deno.land/std/path/mod.ts";
 import { createHash } from "https://deno.land/std/hash/mod.ts";
 import mime from "https://cdn.pika.dev/mime-types@^2.1.27";
@@ -10,6 +10,7 @@ interface ReaderOpts {
 
 const timePatternStr = `(\\d{2})(\\d{2})(\\d{2})Z`;
 const timePattern = new RegExp(timePatternStr);
+const startsWithTimePattern = new RegExp(`^${timePatternStr}`)
 const dayPattern = new RegExp(`(\\d{4})(\\d{2})(\\d{2})`);
 const pathWithTimePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}${timePatternStr}`
@@ -18,6 +19,13 @@ const pathWithDatePattern = new RegExp(
   `(\\d{4})${SEP}(\\d{2})${SEP}(\\d{2})${SEP}`
 );
 const relationFilePattern = /\$(\w+)\.(\w+)$/
+
+function zeroTime(d:Date) {
+  d.setUTCHours(0);
+  d.setUTCMinutes(0);
+  d.setUTCSeconds(0);
+  d.setUTCMilliseconds(0);
+}
 
 export class FileStreamReader implements StreamReader {
   rootDir: string;
@@ -69,7 +77,6 @@ export class FileStreamReader implements StreamReader {
       namePart = filename.replace(pathWithDatePattern, "");
       namePart = timePart + "-" + namePart;
     }
-    // namePart = namePart.replace(/\.\w+$/, "");
     const id = datePart + namePart;
     const fullPath = join(this.rootDir, filename);
     const stats = await Deno.lstat(fullPath);
@@ -84,12 +91,17 @@ export class FileStreamReader implements StreamReader {
       hash.update(fullPath);
       headers.set("etag", `W/"${hash.toString("base64")}"`);
     }
+    const links = await this.relations(id)
+    const previousId = await this.previousId(id)
+    if (previousId) links.unshift({ url: previousId, rel: "previous" })
+    links.unshift({ url: id, rel: "self" })
+
     return {
       id,
       version: "1",
       date,
       contentType,
-      links: [{ url: id, rel: "self" }],
+      links,
       headers,
       getReader: () => {
         return Deno.open(fullPath, { read: true });
@@ -146,10 +158,10 @@ export class FileStreamReader implements StreamReader {
       }
     }
   }
-  async relations(id: string): Promise<Relation[]> {
+  async relations(id: string): Promise<Link[]> {
     const parsedId = this.parseId(id);
     if (!parsedId) return [];
-    const results: Relation[] = [];
+    const results: Link[] = [];
     const { dayDir, date, matches } = parsedId;
     const files = await this.getFiles(dayDir);
     for (const f of files) {
@@ -159,7 +171,7 @@ export class FileStreamReader implements StreamReader {
           const [suffix, rel, ext] = m;
           const relId = id + suffix;
           const type = mime.lookup(ext) || "application/octet-stream";
-          results.push({ id: relId, rel, type });
+          results.push({ url: relId, rel, type });
         }
       }
     }
@@ -175,7 +187,9 @@ export class FileStreamReader implements StreamReader {
     dayFiles = dayFiles.filter(f => !f.name.match(relationFilePattern))
     for (const [i, f] of dayFiles.entries()) {
       if (matches(f.name) && dayFiles.length > i+1) {
-        return this.asPost(join(dayDir, dayFiles[i + 1].name), date);  
+        const previousName = dayFiles[i + 1].name
+        if (!previousName.match(startsWithTimePattern)) zeroTime(date)
+        return this.asPost(join(dayDir, previousName), date);  
       }
     }
     // otherwise, get the most recent one before this date
@@ -193,10 +207,7 @@ export class FileStreamReader implements StreamReader {
     if (!years.includes(date.toISOString().split("-")[0])) return undefined;
 
     let checkDate = new Date(date);
-    checkDate.setUTCHours(0);
-    checkDate.setUTCMinutes(0);
-    checkDate.setUTCSeconds(0);
-    checkDate.setUTCMilliseconds(0);
+    zeroTime(checkDate);
 
     while (checkDate.getUTCFullYear() >= minYear) {
       const pathPrefix = this.getPathForDate(checkDate);

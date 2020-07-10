@@ -44,16 +44,20 @@ export async function serve(opts?: StreamOptions) {
   const server = http.serve({ port });
   console.log(`listening at http://localhost:${port}, opts`, opts);
   for await (const req of server) {
+    const start = performance.now()
     console.log("req:", req.url);
     const stream = getStream(opts);
 
-    const post: Post | undefined = await stream.before();
+    let postId:string|undefined
+    if (req.url.includes('/')) {
+      const parts = req.url.split('/')
+      postId = parts[parts.length-1]
+    }
+    console.log("post id is", postId)
+
+    const post: Post | undefined = postId ? await stream.get(postId) : await stream.before();
     if (post) {
       if (post.links) {
-        const prevId = await stream.previousId(post.id);
-        // console.log("!! seeing prev id", prevId, "adding to links", post.links);
-        if (prevId && !post.links.find((l) => l.rel === "previous"))
-          post.links.push({ url: prevId, rel: "previous" });
         // only returning the absolute url paths,
         // so this part won't make it back to the client
         const url = new URL(req.url, "http://localhost");
@@ -64,7 +68,6 @@ export async function serve(opts?: StreamOptions) {
           // }
         }
       }
-      console.log("links now", post.links);
       const headers = post.headers || new Headers();
       function set(k: string, v: any) {
         const val = getHTTPHeader(k, v);
@@ -85,6 +88,7 @@ export async function serve(opts?: StreamOptions) {
     } else {
       req.respond({ status: 404 });
     }
+    console.log(`-- handled request in ${performance.now()-start}ms --`)
   }
 }
 
@@ -107,16 +111,6 @@ export async function get(opts?: GetOptions) {
         h = new GeminiHeaders(output);
       } else {
         throw new Error(`Format ${opts.format} not recognized`);
-      }
-      const prevId = await stream.previousId(post.id);
-      if (prevId) {
-        if (!post.links) post.links = [];
-        if (!post.links.find(l => l.rel === 'previous')) {
-          post.links.push({
-            rel: "previous",
-            url: prevId,
-          });  
-        }
       }
       await h.setHeader("link", post.links);
       await h.setHeader("post-time", post.date);

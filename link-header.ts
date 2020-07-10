@@ -29,6 +29,7 @@ export function stringify(links: Link[]) {
     .map((link) => {
       const parts: string[] = [`<${link.url}>`];
       if (link.rel) parts.push(`rel="${link.rel}"`);
+      if (link.type) parts.push(`type="${link.type}"`);
       return parts.join("; ");
     })
     .join(", ");
