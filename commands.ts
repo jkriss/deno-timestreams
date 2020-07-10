@@ -47,21 +47,22 @@ export async function serve(opts?: StreamOptions) {
     const start = performance.now();
     const stream = getStream(opts);
 
+    const url = new URL(req.url, "http://localhost");
+    const searchParams = new URLSearchParams(url.search.slice(1));
+    const beforeDateStr = searchParams.get("before");
+    const before = beforeDateStr ? new Date(beforeDateStr) : undefined;
+
     let postId: string | undefined;
-    if (req.url.includes("/")) {
-      const parts = req.url.split("/");
-      postId = parts[parts.length - 1];
-    }
-    console.log("post id is", postId);
+    const parts = url.pathname.split("/");
+    postId = parts[parts.length - 1];
 
     const post: Post | undefined = postId
       ? await stream.get(postId)
-      : await stream.before();
+      : await stream.before(before);
     if (post) {
       if (post.links) {
         // only returning the absolute url paths,
         // so this part won't make it back to the client
-        const url = new URL(req.url, "http://localhost");
         for (const link of post.links) {
           // console.log("handling link", link, "adding prefix", url.pathname);
           // if (!link.url.startsWith("http") && !link.url.startsWith("/")) {
@@ -74,12 +75,6 @@ export async function serve(opts?: StreamOptions) {
         const val = getHTTPHeader(k, v);
         if (val) headers.set(k, val);
       }
-      const h = [
-        ["content-type", post.contentType],
-        ["post-time", post.date],
-        ["time-streams-version", post.version],
-        ["link", post.links],
-      ];
       set("content-type", post.contentType);
       set("post-time", post.date);
       set("time-streams-version", post.version);
